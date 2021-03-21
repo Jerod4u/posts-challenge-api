@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "jochoa-challenge-api-stack"
+s3_bucket = "jochoa-challenge"
+s3_prefix = "jochoa-challenge-api-stack"
+region = "us-west-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
