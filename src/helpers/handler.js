@@ -21,6 +21,18 @@ module.exports = () => {
     return response;
   };
 
+  const unauthorized = (event, error) => {
+    const response = {
+      ...customResponse,
+      statusCode: 401,
+      body: `{ "error": "Unauthorized" }`,
+    };
+    console.info(
+      `response from: ${event.path} statusCode: ${response.statusCode} body: ${response.body}`
+    );
+    return response;
+  };
+
   const internalServerError = (event, error) => {
     const response = {
       ...customResponse,
@@ -43,5 +55,5 @@ module.exports = () => {
     );
     return response;
   };
-  return { badRequest, internalServerError, success };
+  return { badRequest, internalServerError, success, unauthorized };
 };

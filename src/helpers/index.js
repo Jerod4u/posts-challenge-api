@@ -1,2 +1,3 @@
 const handler = require("./handler")();
-module.exports = { handler };
+const cognito = require("./cognito")();
+module.exports = { handler, cognito };

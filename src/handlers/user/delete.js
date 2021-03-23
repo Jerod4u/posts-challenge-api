@@ -1,43 +1,36 @@
 const { handler, cognito } = require("../../helpers");
 const { validateAcess } = cognito;
+const { badRequest, success, internalServerError, unauthorized } = handler;
 const AWS = require("aws-sdk");
 const cognitoServiceProvider = new AWS.CognitoIdentityServiceProvider();
-const { internalServerError, success, unauthorized } = handler;
-
 exports.lambdaHandler = async (event) => {
-  console.info("received:", event);
   try {
-    const { headers } = event;
+    console.info("received:", event);
+    const { pathParameters, headers } = event;
+    const { username } = pathParameters;
     const { accesstoken } = headers;
+    console.log(username)
     if (!accesstoken) return unauthorized(event);
     const hasAccess = await validateAcess(accesstoken, ["admin"]);
     if (!hasAccess) return unauthorized(event);
-    const data = await getUsers();
+    if (!username) return badRequest(event);
+    const data = await deleteUser(username);
     return success(event, data);
   } catch (error) {
     return internalServerError(event, error);
   }
 };
 
-function getUsers() {
+function deleteUser(userName) {
   return new Promise((resolve, reject) => {
     const params = {
       UserPoolId: process.env.USER_POOL_ID,
-      AttributesToGet: ["email", "sub", "custom:accessGroups"],
-      Filter: 'status = "Enabled"',
+      Username: userName,
     };
-    cognitoServiceProvider.listUsers(params, (error, data) => {
-      if (error) {
-        reject(error);
-      } else {
-        const constructedData = data.Users.map((user) => {
-          return {
-            username: user.Username,
-            Attributes: user.Attributes,
-          };
-        });
-        resolve(constructedData);
-      }
+    console.log(params)
+    cognitoServiceProvider.adminDeleteUser(params, function (err, data) {
+      if (err) reject(err);
+      else resolve(data);
     });
   });
 }

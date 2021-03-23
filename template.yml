@@ -61,6 +61,9 @@ Resources:
         AllowHeaders: "'*'"
       Auth:
         ApiKeyRequired: true
+        Authorizers:
+          ChallengeCognitoAuth:
+            UserPoolArn: !GetAtt ChallengeUserPool.Arn
 
   ChallengeApiKey:
     Type: AWS::ApiGateway::ApiKey
@@ -108,7 +111,7 @@ Resources:
             Statement:
               - Effect: "Allow"
                 Action:
-                  - cognito-idp:ListUsers
+                  - cognito-idp:*
                 Resource: !GetAtt ChallengeUserPool.Arn
 
   ChallengePutPostFunction:
@@ -124,6 +127,28 @@ Resources:
             Path: /posts
             RestApiId: !Ref ChallengeAPI
             Method: POST
+            Auth:
+              Authorizers: NONE
+
+  ChallengeLoginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-login
+      Handler: src/handlers/auth/login.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          COGNITO_CLIENT_ID: "3lgi8i89a2hseepnd2t3domelu"
+          AUTH_FLOW: "USER_PASSWORD_AUTH"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /auth
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+            Auth:
+              ApiKeyRequired: false
 
   ChallengeListUsersFunction:
     Type: AWS::Serverless::Function
@@ -141,6 +166,57 @@ Resources:
             Path: /users
             RestApiId: !Ref ChallengeAPI
             Method: GET
+
+  ChallengeCreateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-create-user
+      Handler: src/handlers/user/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeUpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-update-user
+      Handler: src/handlers/user/update.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users/{username}
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeDeleteUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-delete-user
+      Handler: src/handlers/user/delete.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users/{username}
+            RestApiId: !Ref ChallengeAPI
+            Method: DELETE
 
   ChallengeDBInstance:
     Type: AWS::RDS::DBInstance
