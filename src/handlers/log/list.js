@@ -1,31 +1,26 @@
 const { handler, cognito, mysql } = require("../../helpers");
-const { validateAcess, getCurrentUserSub } = cognito;
-const { internalServerError, success, unauthorized, badRequest } = handler;
+const { validateAcess } = cognito;
+const { internalServerError, success, unauthorized } = handler;
 
 exports.lambdaHandler = async (event) => {
   console.info("received:", event);
   try {
-    const { headers, pathParameters } = event;
+    const { headers } = event;
     const { Accesstoken } = headers;
     if (!Accesstoken) return unauthorized(event);
-    const { postid } = pathParameters;
-    const hasAccess = await validateAcess(Accesstoken, ["admin", "postCreate"]);
+    const hasAccess = await validateAcess(Accesstoken, ["admin"]);
     if (!hasAccess) return unauthorized(event);
-    if (!postid) return badRequest(event);
-    const data = await deletePost(postid);
-    return success(event, {
-      affectedRows: data.affectedRows,
-      message: data.message,
-    });
+    const data = await getLogs();
+    return success(event, data);
   } catch (error) {
     return internalServerError(event, error);
   }
 };
 
-function deletePost(postid) {
+function getLogs() {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `DELETE FROM challengedb.Posts WHERE id =${postid}`;
+    const query = "SELECT * FROM challengedb.Posts_logs";
     dbContext
       .query(query)
       .then((result) => {

@@ -9,7 +9,6 @@ exports.lambdaHandler = async (event) => {
     const { pathParameters, headers } = event;
     const { username } = pathParameters;
     const { accesstoken } = headers;
-    console.log(username)
     if (!accesstoken) return unauthorized(event);
     const hasAccess = await validateAcess(accesstoken, ["admin"]);
     if (!hasAccess) return unauthorized(event);
@@ -27,7 +26,6 @@ function deleteUser(userName) {
       UserPoolId: process.env.USER_POOL_ID,
       Username: userName,
     };
-    console.log(params)
     cognitoServiceProvider.adminDeleteUser(params, function (err, data) {
       if (err) reject(err);
       else resolve(data);

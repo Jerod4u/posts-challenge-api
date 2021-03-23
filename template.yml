@@ -22,6 +22,9 @@ Parameters:
   DBPassword:
     Type: String
     Default: "{{resolve:ssm:challenge-db-password:3}}"
+  CognitoClientId:
+    Type: String
+    Default: "{{resolve:ssm:cognito-client-id:1}}"
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
@@ -104,6 +107,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # policy basic execution lambda to add logs to cloudwatch
         - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess # policy default para leer parametros de System Manager
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
       Policies:
         - PolicyName: ListCognitoPoolUsers
           PolicyDocument:
@@ -114,22 +118,6 @@ Resources:
                   - cognito-idp:*
                 Resource: !GetAtt ChallengeUserPool.Arn
 
-  ChallengePutPostFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: lambda-api-challenge-create-post
-      Handler: src/handlers/post/create.lambdaHandler
-      Role: !GetAtt ChallengeFunctionRole.Arn
-      Events:
-        Api:
-          Type: Api
-          Properties:
-            Path: /posts
-            RestApiId: !Ref ChallengeAPI
-            Method: POST
-            Auth:
-              Authorizers: NONE
-
   ChallengeLoginFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -138,7 +126,7 @@ Resources:
       Role: !GetAtt ChallengeFunctionRole.Arn
       Environment:
         Variables:
-          COGNITO_CLIENT_ID: "3lgi8i89a2hseepnd2t3domelu"
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
           AUTH_FLOW: "USER_PASSWORD_AUTH"
       Events:
         Api:
@@ -217,6 +205,110 @@ Resources:
             Path: /users/{username}
             RestApiId: !Ref ChallengeAPI
             Method: DELETE
+
+  ChallengeCreatePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-creat-post
+      Handler: src/handlers/post/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeUpdatePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-update-post
+      Handler: src/handlers/post/update.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeDeletePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-delete-post
+      Handler: src/handlers/post/delete.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}
+            RestApiId: !Ref ChallengeAPI
+            Method: DELETE
+
+  ChallengeListPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-posts
+      Handler: src/handlers/post/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+            Auth:
+              Authorizers: NONE
+
+  ChallengeCreateReviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-create-reviews
+      Handler: src/handlers/review/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}/reviews
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+            Auth:
+              Authorizers: NONE
+
+  ChallengeListReviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-reviews
+      Handler: src/handlers/review/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}/reviews
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+            Auth:
+              Authorizers: NONE
+
+  ChallengeListLogsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-post-logs
+      Handler: src/handlers/log/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /logs
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
 
   ChallengeDBInstance:
     Type: AWS::RDS::DBInstance

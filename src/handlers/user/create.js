@@ -8,10 +8,8 @@ exports.lambdaHandler = async (event) => {
     console.info("received:", event);
     const { headers } = event;
     const { accesstoken } = headers;
-    console.log(headers);
     if (!accesstoken) return unauthorized(event);
     const hasAccess = await validateAcess(accesstoken, ["admin"]);
-    console.log(hasAccess);
     if (!hasAccess) return unauthorized(event);
     const body = JSON.parse(event.body);
     if (!body) return badRequest(event);
@@ -42,7 +40,6 @@ function createUser(username, password, attributes) {
       TemporaryPassword: password,
       UserAttributes: attributes,
     };
-    console.log(params);
     cognitoServiceProvider.adminCreateUser(params, function (err, data) {
       if (err) reject(err);
       else resolve(data);

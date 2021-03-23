@@ -1,18 +1,22 @@
 const { handler, cognito, mysql } = require("../../helpers");
-const { validateAcess, getCurrentUserSub } = cognito;
+const { getCurrentUserSub } = cognito;
 const { internalServerError, success, unauthorized, badRequest } = handler;
 
 exports.lambdaHandler = async (event) => {
   console.info("received:", event);
   try {
-    const { headers, pathParameters } = event;
-    const { Accesstoken } = headers;
-    if (!Accesstoken) return unauthorized(event);
+    const { pathParameters } = event;
     const { postid } = pathParameters;
-    const hasAccess = await validateAcess(Accesstoken, ["admin", "postCreate"]);
-    if (!hasAccess) return unauthorized(event);
-    if (!postid) return badRequest(event);
-    const data = await deletePost(postid);
+    const body = JSON.parse(event.body);
+    if (!(body && postid)) return badRequest(event);
+    const { stars = 5, content } = body;
+    if (!content) return badRequest(event);
+    const review = {
+      stars: stars,
+      content: content,
+      post_id: postid,
+    };
+    const data = await createReview(review);
     return success(event, {
       affectedRows: data.affectedRows,
       message: data.message,
@@ -22,12 +26,12 @@ exports.lambdaHandler = async (event) => {
   }
 };
 
-function deletePost(postid) {
+function createReview(review) {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `DELETE FROM challengedb.Posts WHERE id =${postid}`;
+    const query = `INSERT INTO challengedb.Reviews SET ?`;
     dbContext
-      .query(query)
+      .query(query, review)
       .then((result) => {
         resolve(result);
       })

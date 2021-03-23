@@ -1,3 +1,4 @@
 const handler = require("./handler")();
 const cognito = require("./cognito")();
-module.exports = { handler, cognito };
+const mysql = require("./mysql")();
+module.exports = { handler, cognito, mysql };

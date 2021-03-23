@@ -17,18 +17,28 @@ module.exports = () => {
     });
   };
 
+  const getCurrentUserSub = async (accessToken) => {
+    const currentUser = await getCurrentUser(accessToken);
+    const userSub = currentUser.UserAttributes.find(
+      (attr) => attr.Name === "sub"
+    );
+    return userSub.Value;
+  };
+
   const validateAcess = async (accessToken, roles) => {
     try {
       const currentUser = await getCurrentUser(accessToken);
       const accessGroups = currentUser.UserAttributes.find(
         (attr) => attr.Name === "custom:accessGroups"
       );
-      if (!accessGroups.Value.split(",").some((access) => roles.includes(access)))
+      if (
+        !accessGroups.Value.split(",").some((access) => roles.includes(access))
+      )
         return false;
     } catch (error) {
       return false;
     }
     return true;
   };
-  return { validateAcess };
+  return { validateAcess, getCurrentUserSub };
 };
