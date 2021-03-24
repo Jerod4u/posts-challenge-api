@@ -17,9 +17,10 @@ exports.lambdaHandler = async (event) => {
 function getReviews(postid) {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `SELECT * FROM challengedb.Reviews WHERE post_id=${postid}`;
+    if (isNaN(parseInt(postid))) return reject();
+    const query = `SELECT * FROM challengedb.v_reviews WHERE post_id= ?`;
     dbContext
-      .query(query)
+      .query(query, [postid])
       .then((result) => {
         resolve(result);
       })

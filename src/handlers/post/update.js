@@ -39,9 +39,10 @@ exports.lambdaHandler = async (event) => {
 function updatePost(postid, post) {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `UPDATE challengedb.Posts SET ? WHERE id =${postid}`;
+    if (isNaN(parseInt(postid))) return reject();
+    const query = `UPDATE challengedb.Posts SET ? WHERE id = ?`;
     dbContext
-      .query(query, post)
+      .query(query, [post, postid])
       .then((result) => {
         resolve(result);
       })

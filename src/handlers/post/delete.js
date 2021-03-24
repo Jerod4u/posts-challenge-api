@@ -25,9 +25,10 @@ exports.lambdaHandler = async (event) => {
 function deletePost(postid) {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `DELETE FROM challengedb.Posts WHERE id =${postid}`;
+    if (isNaN(parseInt(postid))) return reject();
+    const query = `DELETE FROM challengedb.Posts WHERE id = ?`;
     dbContext
-      .query(query)
+      .query(query, [postid])
       .then((result) => {
         resolve(result);
       })

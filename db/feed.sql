@@ -10,6 +10,32 @@ CREATE TABLE `Posts` (
     PRIMARY KEY (`id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8;
 
+CREATE VIEW `v_posts` AS
+(
+    SELECT P.*,
+        avg(R.stars) AS review,
+        datediff(current_date(), P.created) AS days,
+        if(datediff(current_date(), P.created)>7,"Old post", "New post") as tag 
+    FROM challengedb.Posts AS P
+        LEFT JOIN challengedb.Reviews R ON R.post_id = P.id
+    GROUP BY P.id
+    ORDER BY P.created DESC
+)
+
+DELIMITER //
+
+CREATE PROCEDURE sp_get_posts(
+    IN fromDate datetime,
+    IN toDate datetime)
+BEGIN
+	SELECT * FROM challengedb.v_posts
+	WHERE ( fromDate is null or created >= fromDate)
+		AND ( toDate is null or created <= toDate);
+END //
+
+DELIMITER ;
+
+
 CREATE TABLE `Posts_logs` (
     `id` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
     `action` varchar(50) NOT NULL,
@@ -31,6 +57,11 @@ CREATE TABLE `Reviews` (
     KEY `post_id` (`post_id`),
     CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `Posts` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8;
+
+CREATE VIEW `v_reviews` AS
+(SELECT * FROM `Reviews` 
+	ORDER BY `created` DESC);
+    
 
 DELIMITER $$
 

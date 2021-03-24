@@ -1,29 +1,34 @@
 const { handler, mysql } = require("../../helpers");
-const { internalServerError, success } = handler;
+const moment = require("moment");
+const { internalServerError, success, badRequest } = handler;
 
 exports.lambdaHandler = async (event) => {
   console.info("received:", event);
   try {
-    const data = await getPosts();
+    const { queryStringParameters } = event;
+    const { fromDate = null, toDate = null } = queryStringParameters || {};
+    if (!(validateDateFormat(fromDate) && validateDateFormat(toDate)))
+      return badRequest(event);
+    const params = [fromDate, toDate];
+    const data = await getPosts(params);
     return success(event, data);
   } catch (error) {
     return internalServerError(event, error);
   }
 };
 
-function getPosts() {
+function validateDateFormat(date) {
+  return !date || moment(date, "yyyy-MM-DD", true).isValid();
+}
+
+function getPosts(params) {
   return new Promise((resolve, reject) => {
     const dbContext = new mysql.DBContext();
-    const query = `SELECT P.*, 
-                    avg(R.stars) AS review FROM 
-                    challengedb.Posts AS P
-                  LEFT JOIN challengedb.Reviews R ON R.post_id = P.id
-                  GROUP BY P.id
-                  ORDER BY P.created DESC`;
+    const query = `CALL sp_get_posts(? , ?)`;
     dbContext
-      .query(query)
+      .query(query, params)
       .then((result) => {
-        resolve(result);
+        resolve(result[0]);
       })
       .catch((error) => {
         reject(error);
