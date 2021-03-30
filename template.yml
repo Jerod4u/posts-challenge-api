@@ -12,104 +12,324 @@ Description: >-
 Transform:
   - AWS::Serverless-2016-10-31
 
+Parameters:
+  DBName:
+    Type: String
+    Default: challengedb
+  DBUser:
+    Type: String
+    Default: "{{resolve:ssm:challenge-user:1}}"
+  DBPassword:
+    Type: String
+    Default: "{{resolve:ssm:challenge-db-password:3}}"
+  CognitoClientId:
+    Type: String
+    Default: "{{resolve:ssm:cognito-client-id:1}}"
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs14.x
+    MemorySize: 128
+    Environment:
+      Variables:
+        DB_NAME: !Ref DBName
+        DB_USER: !Ref DBUser
+        DB_PASSWORD: !Ref DBPassword
+        DB_HOST: !GetAtt ChallengeDBInstance.Endpoint.Address
+        DB_PORT: !GetAtt ChallengeDBInstance.Endpoint.Port
+
 # Resources declares the AWS resources that you want to include in the stack
 # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
 Resources:
-  GTIBucket:
+  ChallengeUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: cognito-user-pool-challenge
+
+  ChallengeBucket:
     Type: "AWS::S3::Bucket"
     Properties:
-      BucketName: !Sub jochoa-challenge-${AWS::AccountId}
+      BucketName: !Sub bucket-challenge-${AWS::AccountId}
 
-  getAllItemsFunction:
+  ChallengeAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: api-gateway-challenge
+      StageName: dev
+      Cors:
+        AllowMethods: "'*'"
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+      Auth:
+        ApiKeyRequired: true
+        Authorizers:
+          ChallengeCognitoAuth:
+            UserPoolArn: !GetAtt ChallengeUserPool.Arn
+
+  ChallengeApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: api-key-challenge
+      Enabled: true
+      StageKeys:
+        - RestApiId: !Ref ChallengeAPI
+          StageName: !Ref ChallengeAPI.Stage
+
+  ChallengeUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      ApiStages:
+        - ApiId: !Ref ChallengeAPI
+          Stage: !Ref ChallengeAPI.Stage
+      UsagePlanName: gateway-api-usage-plan-challenge
+
+  ChallengeUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref ChallengeApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref ChallengeUsagePlan
+
+  ChallengeFunctionRole:
+    Type: AWS::IAM::Role # More info about Roles: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html
+    Properties:
+      RoleName: iam-role-challenge-functions
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ["lambda.amazonaws.com"]
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole # policy basic execution lambda to add logs to cloudwatch
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess # policy default para leer parametros de System Manager
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess
+      Policies:
+        - PolicyName: ListCognitoPoolUsers
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - cognito-idp:*
+                Resource: !GetAtt ChallengeUserPool.Arn
+
+  ChallengeLoginFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/handlers/item//get-all-items.getAllItemsHandler
-      Runtime: nodejs14.x
-      MemorySize: 128
-      Timeout: 100
-      Description: A simple example includes a HTTP get method to get all items from a DynamoDB table.
-      Policies:
-        # Give Create/Read/Update/Delete Permissions to the ChallengeTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ChallengeTable
+      FunctionName: lambda-api-challenge-login
+      Handler: src/handlers/auth/login.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
       Environment:
         Variables:
-          # Make table name accessible as environment variable from function code during execution
-          SAMPLE_TABLE: !Ref ChallengeTable
+          COGNITO_CLIENT_ID: !Ref CognitoClientId
+          AUTH_FLOW: "USER_PASSWORD_AUTH"
       Events:
         Api:
           Type: Api
           Properties:
-            Path: /
-            Method: GET
-  # Each Lambda function is defined by properties:
-  # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
-
-  # This is a Lambda function config associated with the source code: get-by-id.js
-  getByIdFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/item//get-by-id.getByIdHandler
-      Runtime: nodejs14.x
-      MemorySize: 128
-      Timeout: 100
-      Description: A simple example includes a HTTP get method to get one item by id from a DynamoDB table.
-      Policies:
-        # Give Create/Read/Update/Delete Permissions to the ChallengeTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ChallengeTable
-      Environment:
-        Variables:
-          # Make table name accessible as environment variable from function code during execution
-          SAMPLE_TABLE: !Ref ChallengeTable
-      Events:
-        Api:
-          Type: Api
-          Properties:
-            Path: /{id}
-            Method: GET
-  # Each Lambda function is defined by properties:
-  # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
-
-  # This is a Lambda function config associated with the source code: put-item.js
-  putItemFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: src/handlers/item//put-item.putItemHandler
-      Runtime: nodejs14.x
-      MemorySize: 128
-      Timeout: 100
-      Description: A simple example includes a HTTP post method to add one item to a DynamoDB table.
-      Policies:
-        # Give Create/Read/Update/Delete Permissions to the ChallengeTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ChallengeTable
-      Environment:
-        Variables:
-          # Make table name accessible as environment variable from function code during execution
-          SAMPLE_TABLE: !Ref ChallengeTable
-      Events:
-        Api:
-          Type: Api
-          Properties:
-            Path: /
+            Path: /auth
+            RestApiId: !Ref ChallengeAPI
             Method: POST
-  # Simple syntax to create a DynamoDB table with a single attribute primary key, more in
-  # https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlesssimpletable
+            Auth:
+              ApiKeyRequired: false
 
-  # DynamoDB table to store item: {id: &lt;ID&gt;, name: &lt;NAME&gt;}
-  ChallengeTable:
-    Type: AWS::Serverless::SimpleTable
+  ChallengeListUsersFunction:
+    Type: AWS::Serverless::Function
     Properties:
-      TableName: "dynamodb-challengetable"
-      PrimaryKey:
-        Name: id
-        Type: String
-      ProvisionedThroughput:
-        ReadCapacityUnits: 2
-        WriteCapacityUnits: 2
+      FunctionName: lambda-api-challenge-list-users
+      Handler: src/handlers/user/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+
+  ChallengeCreateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-create-user
+      Handler: src/handlers/user/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeUpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-update-user
+      Handler: src/handlers/user/update.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users/{username}
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeDeleteUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-delete-user
+      Handler: src/handlers/user/delete.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref ChallengeUserPool
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /users/{username}
+            RestApiId: !Ref ChallengeAPI
+            Method: DELETE
+
+  ChallengeCreatePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-creat-post
+      Handler: src/handlers/post/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeUpdatePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-update-post
+      Handler: src/handlers/post/update.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+
+  ChallengeDeletePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-delete-post
+      Handler: src/handlers/post/delete.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}
+            RestApiId: !Ref ChallengeAPI
+            Method: DELETE
+
+  ChallengeListPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-posts
+      Handler: src/handlers/post/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+            Auth:
+              Authorizers: NONE
+
+  ChallengeCreateReviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-create-reviews
+      Handler: src/handlers/review/create.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}/reviews
+            RestApiId: !Ref ChallengeAPI
+            Method: POST
+            Auth:
+              Authorizers: NONE
+
+  ChallengeListReviewFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-reviews
+      Handler: src/handlers/review/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /posts/{postid}/reviews
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+            Auth:
+              Authorizers: NONE
+
+  ChallengeListLogsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: lambda-api-challenge-list-post-logs
+      Handler: src/handlers/log/list.lambdaHandler
+      Role: !GetAtt ChallengeFunctionRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /logs
+            RestApiId: !Ref ChallengeAPI
+            Method: GET
+
+  ChallengeDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref DBName
+      AllocatedStorage: "5"
+      DBInstanceClass: db.t2.micro
+      Engine: MySQL
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
 
 Outputs:
+  APIKEY:
+    Description: "Challenge API KEY ID"
+    Value: !Ref ChallengeApiKey
   WebEndpoint:
-    Description: "API Gateway endpoint URL for Prod stage"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Description: "API Gateway endpoint URL for test stage"
+    Value: !Sub "https://${ChallengeAPI}.execute-api.${AWS::Region}.amazonaws.com/dev/"
+  DBInstanceHost:
+    Description: "URL of DB Instance"
+    Value: !GetAtt ChallengeDBInstance.Endpoint.Address
+  DBInstancePort:
+    Description: "Port of DB Instance"
+    Value: !GetAtt ChallengeDBInstance.Endpoint.Port
